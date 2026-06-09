@@ -22,6 +22,12 @@ type IrcPrivmsgEvent = {
   rawLine: string;
 };
 
+export type IrcMessageTags = Record<string, string | number | boolean | null | undefined>;
+
+export type IrcSendPrivmsgOptions = {
+  tags?: IrcMessageTags;
+};
+
 export type IrcClientOptions = {
   host: string;
   port: number;
@@ -54,7 +60,7 @@ export type IrcClient = {
   isReady: () => boolean;
   sendRaw: (line: string) => void;
   join: (channel: string) => void;
-  sendPrivmsg: (target: string, text: string) => void;
+  sendPrivmsg: (target: string, text: string, opts?: IrcSendPrivmsgOptions) => void;
   quit: (reason?: string) => void;
   close: () => void;
 };
@@ -100,6 +106,35 @@ export function buildIrcNickServCommands(options?: IrcNickServOptions): string[]
     commands.push(`PRIVMSG ${service} :REGISTER ${password} ${registerEmail}`);
   }
   return commands;
+}
+
+const IRC_TAG_KEY_RE = /^\+?[A-Za-z0-9.-]+\/[A-Za-z0-9.-]+$/;
+
+function escapeIrcTagValue(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\:")
+    .replace(/ /g, "\\s")
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n");
+}
+
+export function formatIrcMessageTags(tags?: IrcMessageTags): string {
+  const entries: string[] = [];
+  for (const [key, value] of Object.entries(tags ?? {})) {
+    if (value === false || value == null) {
+      continue;
+    }
+    if (!IRC_TAG_KEY_RE.test(key)) {
+      throw new Error(`Invalid IRC message tag key: ${key}`);
+    }
+    if (value === true) {
+      entries.push(key);
+      continue;
+    }
+    entries.push(`${key}=${escapeIrcTagValue(String(value))}`);
+  }
+  return entries.length > 0 ? `@${entries.join(";")} ` : "";
 }
 
 export async function connectIrcClient(options: IrcClientOptions): Promise<IrcClient> {
@@ -203,12 +238,13 @@ export async function connectIrcClient(options: IrcClientOptions): Promise<IrcCl
     sendRaw(`JOIN ${target}`);
   };
 
-  const sendPrivmsg = (target: string, text: string) => {
+  const sendPrivmsg = (target: string, text: string, opts?: IrcSendPrivmsgOptions) => {
     const normalizedTarget = sanitizeIrcTarget(target);
     const cleaned = sanitizeIrcOutboundText(text);
     if (!cleaned) {
       return;
     }
+    const tagPrefix = formatIrcMessageTags(opts?.tags);
     let remaining = cleaned;
     while (remaining.length > 0) {
       let chunk = remaining;
@@ -222,7 +258,7 @@ export async function connectIrcClient(options: IrcClientOptions): Promise<IrcCl
       if (!chunk) {
         break;
       }
-      sendRaw(`PRIVMSG ${normalizedTarget} :${chunk}`);
+      sendRaw(`${tagPrefix}PRIVMSG ${normalizedTarget} :${chunk}`);
       remaining = remaining.slice(chunk.length).trimStart();
     }
   };

@@ -7,7 +7,7 @@ import { resolveMarkdownTableMode } from "openclaw/plugin-sdk/markdown-table-run
 import { requireRuntimeConfig } from "openclaw/plugin-sdk/plugin-config-runtime";
 import { convertMarkdownTables } from "openclaw/plugin-sdk/text-chunking";
 import { resolveIrcAccount } from "./accounts.js";
-import type { IrcClient } from "./client.js";
+import type { IrcClient, IrcMessageTags } from "./client.js";
 import { connectIrcClient } from "./client.js";
 import { buildIrcConnectOptions } from "./connect-options.js";
 import { normalizeIrcMessagingTarget } from "./normalize.js";
@@ -21,6 +21,7 @@ type SendIrcOptions = {
   replyTo?: string;
   target?: string;
   client?: IrcClient;
+  tags?: IrcMessageTags;
 };
 
 type SendIrcResult = {
@@ -87,7 +88,11 @@ export async function sendMessageIrc(
 
   const client = opts.client;
   if (client?.isReady()) {
-    client.sendPrivmsg(target, payload);
+    if (opts.tags) {
+      client.sendPrivmsg(target, payload, { tags: opts.tags });
+    } else {
+      client.sendPrivmsg(target, payload);
+    }
   } else {
     const transient = await connectIrcClient(
       buildIrcConnectOptions(account, {
@@ -97,7 +102,11 @@ export async function sendMessageIrc(
     if (target.startsWith("#") || target.startsWith("&")) {
       transient.join(target);
     }
-    transient.sendPrivmsg(target, payload);
+    if (opts.tags) {
+      transient.sendPrivmsg(target, payload, { tags: opts.tags });
+    } else {
+      transient.sendPrivmsg(target, payload);
+    }
     transient.quit("sent");
   }
 

@@ -103,9 +103,14 @@ describe("irc inbound behavior", () => {
   });
 
   it("issues a DM pairing challenge and sends the reply to the sender nick", async () => {
-    const sendReply = vi.fn<(target: string, text: string, replyToId?: string) => Promise<void>>(
-      async () => {},
-    );
+    const sendReply = vi.fn<
+      (
+        target: string,
+        text: string,
+        replyToId?: string,
+        opts?: { tags?: Record<string, string> },
+      ) => Promise<void>
+    >(async () => {});
 
     await handleIrcInbound({
       message: createMessage(),
@@ -244,8 +249,15 @@ describe("irc inbound behavior", () => {
       "alice",
       "<tool>\nchecking status\n</tool>",
       undefined,
+      { tags: { "+openclaw.dev/reply-kind": "tool" } },
     );
-    expect(sendReply).toHaveBeenNthCalledWith(2, "alice", "<final>\nall done\n</final>", undefined);
+    expect(sendReply).toHaveBeenNthCalledWith(
+      2,
+      "alice",
+      "<final>\nall done\n</final>",
+      undefined,
+      { tags: { "+openclaw.dev/reply-kind": "final" } },
+    );
   });
 
   it("uses channel:# prefix for group channel From and OriginatingTo fields", async () => {

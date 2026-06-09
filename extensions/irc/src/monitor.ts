@@ -122,8 +122,12 @@ export async function monitorIrcProvider(opts: IrcMonitorOptions): Promise<{ sto
           config: cfg,
           runtime,
           connectedNick: client.nick,
-          sendReply: async (target, text) => {
-            client?.sendPrivmsg(target, text);
+          sendReply: async (target, text, _replyToId, sendOpts) => {
+            if (sendOpts?.tags) {
+              client?.sendPrivmsg(target, text, { tags: sendOpts.tags });
+            } else {
+              client?.sendPrivmsg(target, text);
+            }
             opts.statusSink?.({ lastOutboundAt: Date.now() });
             core.channel.activity.record({
               channel: "irc",

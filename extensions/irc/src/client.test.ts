@@ -1,6 +1,6 @@
 // Irc tests cover client plugin behavior.
 import { describe, expect, it } from "vitest";
-import { buildIrcNickServCommands } from "./client.js";
+import { buildIrcNickServCommands, formatIrcMessageTags } from "./client.js";
 
 describe("irc client nickserv", () => {
   it("builds IDENTIFY command when password is set", () => {
@@ -40,5 +40,18 @@ describe("irc client nickserv", () => {
         password: "secret\r\nJOIN #bad",
       }),
     ).toEqual(["PRIVMSG NickServ :IDENTIFY secret JOIN #bad"]);
+  });
+
+  it("formats IRCv3 message tags with escaped values", () => {
+    expect(
+      formatIrcMessageTags({
+        "+openclaw.dev/reply-kind": "final",
+        "+openclaw.dev/detail": "semi; space slash\\ cr\r lf\n",
+        "+openclaw.dev/flag": true,
+        "+openclaw.dev/skip": false,
+      }),
+    ).toBe(
+      String.raw`@+openclaw.dev/reply-kind=final;+openclaw.dev/detail=semi\:\sspace\sslash\\\scr\r\slf\n;+openclaw.dev/flag `,
+    );
   });
 });

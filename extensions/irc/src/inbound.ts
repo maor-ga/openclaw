@@ -27,6 +27,7 @@ import {
   normalizeStringEntries,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
 import type { ResolvedIrcAccount } from "./accounts.js";
+import type { IrcMessageTags } from "./client.js";
 import { buildIrcAllowlistCandidates, normalizeIrcAllowEntry } from "./normalize.js";
 import { resolveIrcGroupMatch, resolveIrcRequireMention } from "./policy.js";
 import { getIrcRuntime } from "./runtime.js";
@@ -147,19 +148,30 @@ async function deliverIrcReply(params: {
   cfg: CoreConfig;
   target: string;
   accountId: string;
-  sendReply?: (target: string, text: string, replyToId?: string) => Promise<void>;
+  tags?: IrcMessageTags;
+  sendReply?: (
+    target: string,
+    text: string,
+    replyToId?: string,
+    opts?: { tags?: IrcMessageTags },
+  ) => Promise<void>;
   statusSink?: (patch: { lastOutboundAt?: number }) => void;
 }) {
   await deliverFormattedTextWithAttachments({
     payload: params.payload,
     send: async ({ text, replyToId }) => {
       if (params.sendReply) {
-        await params.sendReply(params.target, text, replyToId);
+        if (params.tags) {
+          await params.sendReply(params.target, text, replyToId, { tags: params.tags });
+        } else {
+          await params.sendReply(params.target, text, replyToId);
+        }
       } else {
         await sendMessageIrc(params.target, text, {
           cfg: params.cfg,
           accountId: params.accountId,
           replyTo: replyToId,
+          tags: params.tags,
         });
       }
       params.statusSink?.({ lastOutboundAt: Date.now() });
@@ -180,13 +192,24 @@ function tagIrcReplyPayloadKind(
   };
 }
 
+function buildIrcReplyKindTags(kind: ReplyDispatchKind): IrcMessageTags {
+  return {
+    "+openclaw.dev/reply-kind": kind,
+  };
+}
+
 export async function handleIrcInbound(params: {
   message: IrcInboundMessage;
   account: ResolvedIrcAccount;
   config: CoreConfig;
   runtime: RuntimeEnv;
   connectedNick?: string;
-  sendReply?: (target: string, text: string, replyToId?: string) => Promise<void>;
+  sendReply?: (
+    target: string,
+    text: string,
+    replyToId?: string,
+    opts?: { tags?: IrcMessageTags },
+  ) => Promise<void>;
   statusSink?: (patch: { lastInboundAt?: number; lastOutboundAt?: number }) => void;
 }): Promise<void> {
   const { message, account, config, runtime, connectedNick, statusSink } = params;
@@ -424,14 +447,16 @@ export async function handleIrcInbound(params: {
       core.channel.reply.dispatchReplyWithBufferedBlockDispatcher,
     delivery: {
       deliver: async (payload, info) => {
-        const replyPayload = account.config.replyKindTags
-          ? tagIrcReplyPayloadKind(payload, info.kind)
-          : payload;
+        const replyKindTags = account.config.replyKindTags
+          ? buildIrcReplyKindTags(info.kind)
+          : undefined;
+        const replyPayload = replyKindTags ? tagIrcReplyPayloadKind(payload, info.kind) : payload;
         await deliverIrcReply({
           payload: replyPayload,
           cfg: config,
           target: peerId,
           accountId: account.accountId,
+          tags: replyKindTags,
           sendReply: params.sendReply,
           statusSink,
         });

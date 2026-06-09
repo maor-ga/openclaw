@@ -207,6 +207,31 @@ describe("sendMessageIrc cfg threading", () => {
     expect(result.messageId.length).toBeGreaterThan(0);
   });
 
+  it("passes IRCv3 message tags to ready clients", async () => {
+    const providedCfg = {
+      channels: {
+        irc: {
+          host: "irc.example.com",
+          nick: "openclaw",
+        },
+      },
+    } as unknown as CoreConfig;
+    const client = {
+      isReady: vi.fn(() => true),
+      sendPrivmsg: vi.fn(),
+    } as unknown as IrcClient;
+
+    await sendMessageIrc("#room", "hello", {
+      cfg: providedCfg,
+      client,
+      tags: { "+openclaw.dev/reply-kind": "final" },
+    });
+
+    expect(client.sendPrivmsg).toHaveBeenCalledWith("#room", "hello", {
+      tags: { "+openclaw.dev/reply-kind": "final" },
+    });
+  });
+
   it("preserves reply ids in receipts", async () => {
     const providedCfg = {
       channels: {
