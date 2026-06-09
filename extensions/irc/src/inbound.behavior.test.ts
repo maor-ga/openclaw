@@ -200,6 +200,54 @@ describe("irc inbound behavior", () => {
     expect(assembledRequest?.replyPipeline).toEqual({});
   });
 
+  it("wraps dispatched reply text with kind tags when enabled", async () => {
+    const coreRuntime = createPluginRuntimeMock();
+    const dispatchReply = coreRuntime.channel.reply
+      .dispatchReplyWithBufferedBlockDispatcher as unknown as ReturnType<typeof vi.fn>;
+    dispatchReply.mockImplementation(
+      async (params: {
+        dispatcherOptions: {
+          deliver: (
+            payload: { text: string },
+            info: { kind: "tool" | "block" | "final" },
+          ) => Promise<void>;
+        };
+      }) => {
+        await params.dispatcherOptions.deliver({ text: "checking status" }, { kind: "tool" });
+        await params.dispatcherOptions.deliver({ text: "all done" }, { kind: "final" });
+        return { queuedFinal: true, counts: { tool: 1, block: 0, final: 1 } };
+      },
+    );
+    const sendReply = vi.fn<(target: string, text: string, replyToId?: string) => Promise<void>>(
+      async () => {},
+    );
+    setIrcRuntime(coreRuntime as never);
+
+    await handleIrcInbound({
+      message: createMessage(),
+      account: createAccount({
+        config: {
+          dmPolicy: "open",
+          allowFrom: ["*"],
+          groupPolicy: "allowlist",
+          groupAllowFrom: [],
+          replyKindTags: true,
+        },
+      }),
+      config: { channels: { irc: {} } } as CoreConfig,
+      runtime: createRuntimeEnv(),
+      sendReply,
+    });
+
+    expect(sendReply).toHaveBeenNthCalledWith(
+      1,
+      "alice",
+      "<tool>\nchecking status\n</tool>",
+      undefined,
+    );
+    expect(sendReply).toHaveBeenNthCalledWith(2, "alice", "<final>\nall done\n</final>", undefined);
+  });
+
   it("uses channel:# prefix for group channel From and OriginatingTo fields", async () => {
     const coreRuntime = createPluginRuntimeMock();
     const runtime = createRuntimeEnv();

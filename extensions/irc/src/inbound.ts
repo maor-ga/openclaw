@@ -13,6 +13,7 @@ import {
   deliverFormattedTextWithAttachments,
   type OutboundReplyPayload,
 } from "openclaw/plugin-sdk/reply-payload";
+import type { ReplyDispatchKind } from "openclaw/plugin-sdk/reply-runtime";
 import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime";
 import {
   GROUP_POLICY_BLOCKED_LABEL,
@@ -164,6 +165,19 @@ async function deliverIrcReply(params: {
       params.statusSink?.({ lastOutboundAt: Date.now() });
     },
   });
+}
+
+function tagIrcReplyPayloadKind(
+  payload: OutboundReplyPayload,
+  kind: ReplyDispatchKind,
+): OutboundReplyPayload {
+  if (!payload.text) {
+    return payload;
+  }
+  return {
+    ...payload,
+    text: `<${kind}>\n${payload.text}\n</${kind}>`,
+  };
 }
 
 export async function handleIrcInbound(params: {
@@ -409,9 +423,12 @@ export async function handleIrcInbound(params: {
     dispatchReplyWithBufferedBlockDispatcher:
       core.channel.reply.dispatchReplyWithBufferedBlockDispatcher,
     delivery: {
-      deliver: async (payload) => {
+      deliver: async (payload, info) => {
+        const replyPayload = account.config.replyKindTags
+          ? tagIrcReplyPayloadKind(payload, info.kind)
+          : payload;
         await deliverIrcReply({
-          payload,
+          payload: replyPayload,
           cfg: config,
           target: peerId,
           accountId: account.accountId,

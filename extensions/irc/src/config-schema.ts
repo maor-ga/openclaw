@@ -65,6 +65,7 @@ const IrcAccountSchemaBase = z
     channels: z.array(z.string()).optional(),
     mentionPatterns: z.array(z.string()).optional(),
     markdown: MarkdownConfigSchema,
+    replyKindTags: z.boolean().optional(),
     ...ReplyRuntimeConfigSchemaShape,
   })
   .strict();
